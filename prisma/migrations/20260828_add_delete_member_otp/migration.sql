@@ -1,0 +1,3 @@
+ALTER TABLE "User"
+  ADD COLUMN IF NOT EXISTS "deleteOtpHash" TEXT,
+  ADD COLUMN IF NOT EXISTS "deleteOtpExpires" TIMESTAMP(3);

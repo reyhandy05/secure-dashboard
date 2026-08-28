@@ -1,4 +1,47 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Northstar Security Console
+
+Internal secure asset and incident management dashboard built with Next.js App Router, TypeScript, Prisma/PostgreSQL, Auth.js database sessions, Argon2id, Zod, and Tailwind CSS.
+
+## Structure
+
+```text
+src/app/                 UI, login, API route, server actions
+src/auth.ts              Auth.js credentials provider and database sessions
+src/lib/security.ts      Argon2id, rate limit, CSRF origin, SSRF URL guard
+src/lib/validators.ts    Strict Zod payload schemas
+src/lib/prisma.ts        Singleton Prisma client
+prisma/schema.prisma     Users, sessions, incidents, audit events
+middleware.ts            Auth guard, admin RBAC, CSP and HTTP headers
+```
+
+## Local setup
+
+1. Copy `.env.example` to `.env` and provide PostgreSQL plus a long random `AUTH_SECRET`.
+2. Run `npx prisma migrate dev --name init`.
+3. Start with `npm run dev` and open `http://localhost:3000`.
+
+The in-memory limiter is for single-instance development only. Production must replace it with shared Redis/Upstash sliding-window storage. MFA wiring is fail-closed in this sample; replace the placeholder TOTP check with a vetted server-side TOTP library before enabling accounts.
+
+## Security checklist
+
+- [ ] Enforce TLS and confirm HSTS preload is appropriate for the domain.
+- [ ] Store `AUTH_SECRET`, database credentials, and IP salt in a secrets manager.
+- [ ] Use a least-privilege PostgreSQL role with encrypted connections.
+- [ ] Use shared Redis rate limiting across all app instances.
+- [ ] Encrypt MFA TOTP secrets at rest and hash recovery codes.
+- [ ] Validate origin plus CSRF token on every state-changing mutation.
+- [ ] Sanitize rich text with a strict allowlist before persistence and rendering.
+- [ ] Validate upload magic bytes, size, type, random object keys, and isolated storage.
+- [ ] Keep audit logs append-only and free of passwords or secrets.
+- [ ] Pass dependency review, SAST, DAST, and backup restore tests.
+
+## Commands
+
+```bash
+npm run lint
+npx tsc --noEmit
+npm run build
+```
 
 ## Getting Started
 

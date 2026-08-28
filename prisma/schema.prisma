@@ -1,0 +1,38 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id               String    @id @default(cuid())
+  email            String    @unique
+  passwordHash     String
+  name             String?
+  role             String    @default("USER")
+  mfaEnabled       Boolean   @default(false)
+  deleteOtpHash    String?
+  deleteOtpExpires DateTime?
+  inviteTokenHash  String?   @unique
+  inviteTokenExpires DateTime?
+  inviteAcceptedAt DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}
+
+model Incident {
+  id         String   @id @default(cuid())
+  incidentId String   @unique
+  title      String
+  asset      String
+  owner      String   @default("Ariel Reyhandy")
+  severity   String
+  status     String   @default("Open")
+  time       String   @default("Just now")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
