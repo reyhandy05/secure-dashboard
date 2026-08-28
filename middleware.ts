@@ -6,7 +6,7 @@ const protectedPaths = ["/", "/incidents", "/assets", "/team"];
 export default function middleware(request: NextRequest) {
   const response = NextResponse.next();
   
-  // CSP yang kompatibel dengan Next.js App Router, Google Fonts, dan Supabase
+  // CSP tanpa nonce agar Next.js dan Supabase berjalan lancar di Vercel
   const csp = [
     `default-src 'self'`,
     `script-src 'self' 'unsafe-eval' 'unsafe-inline'`,
@@ -23,7 +23,6 @@ export default function middleware(request: NextRequest) {
   response.headers.set("X-Frame-Options", "DENY");
   response.headers.set("X-Content-Type-Options", "nosniff");
   response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-  response.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()");
   
   if (process.env.NODE_ENV === "production") {
     response.headers.set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload");
@@ -37,13 +36,6 @@ export default function middleware(request: NextRequest) {
 
   if (protectedPaths.includes(pathname) && !sessionCookie) {
     return NextResponse.redirect(new URL("/login", request.url));
-  }
-
-  if (request.method !== "GET" && request.method !== "HEAD" && request.method !== "OPTIONS") {
-    const origin = request.headers.get("origin");
-    if (origin && origin !== request.nextUrl.origin) {
-      return new NextResponse("Forbidden", { status: 403 });
-    }
   }
 
   return response;
