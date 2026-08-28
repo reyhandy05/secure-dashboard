@@ -6,7 +6,6 @@ const protectedPaths = ["/", "/incidents", "/assets", "/team"];
 export default function middleware(request: NextRequest) {
   const response = NextResponse.next();
   
-  // CSP tanpa nonce agar Next.js dan Supabase berjalan lancar di Vercel
   const csp = [
     `default-src 'self'`,
     `script-src 'self' 'unsafe-eval' 'unsafe-inline'`,
