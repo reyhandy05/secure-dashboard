@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql" // atau "sqlite" / "mysql" sesuai database proyekmu
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -16,24 +16,44 @@ model User {
   accessStatus       String    @default("Active")
   mfaEnabled         Boolean   @default(false)
   
-  // Field untuk MFA & Login OTP
+  // Field MFA & Login OTP
   mfaOtpHash         String?
   mfaOtpExpires      DateTime?
   loginOtpHash       String?
   loginOtpExpires    DateTime?
   
-  // Field untuk Role OTP & Delete/Invite
+  // Field Role OTP
   roleOtpHash        String?
   roleOtpExpires     DateTime?
+  roleOtpTargetId    String?
+  roleOtpNewRole     String?
+  
+  // Field Delete & Invite
   deleteOtpHash      String?
   deleteOtpExpires   DateTime?
-  inviteTokenHash    String?
+  inviteTokenHash    String?   @unique
   inviteTokenExpires DateTime?
   inviteAcceptedAt   DateTime?
   
-  // Field untuk Realtime Presence
+  // Field Realtime Presence
   lastSeenAt         DateTime?
   
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
+}
+
+model Incident {
+  id          String   @id @default(cuid())
+  incidentId  String?  @unique
+  title       String
+  asset       String   @default("GLOBAL-GATEWAY")
+  owner       String   @default("SOC Lead")
+  severity    String   @default("Medium")
+  status      String   @default("Open")
+  time        String?  @default("Just now")
+  description String?
+  sourceIp    String?
+  assignedTo  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }

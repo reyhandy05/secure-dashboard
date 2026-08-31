@@ -68,8 +68,8 @@ const severityColors: Record<string, string> = {
 function normalizeRealtimeIncident(record: Record<string, unknown>): Incident {
   const statusValue = String(record.status ?? "Open").toLowerCase();
   const severityValue = String(record.severity ?? "Medium").toLowerCase();
-  const status = statusValue.charAt(0).toUpperCase() + statusValue.slice(1) as Incident["status"];
-  const severity = severityValue.charAt(0).toUpperCase() + severityValue.slice(1) as Incident["severity"];
+  const status = (statusValue.charAt(0).toUpperCase() + statusValue.slice(1)) as Incident["status"];
+  const severity = (severityValue.charAt(0).toUpperCase() + severityValue.slice(1)) as Incident["severity"];
 
   return {
     id: String(record.incidentId ?? record.id ?? "UNKNOWN"),
@@ -149,7 +149,17 @@ export default function Home() {
       try {
         const incidents = await getIncidents();
         if (active) {
-          setIncidentsList(incidents.map((incident) => ({ ...incident, id: incident.incidentId, databaseId: incident.id }) as Incident));
+          // Explicit mapping to avoid TypeScript coercion errors
+          setIncidentsList(incidents.map((incident: any) => ({
+            id: String(incident.incidentId ?? incident.id ?? "UNKNOWN"),
+            databaseId: String(incident.id ?? ""),
+            title: String(incident.title ?? "Untitled"),
+            asset: String(incident.asset ?? "Unknown asset"),
+            owner: String(incident.owner ?? "Ariel Reyhandy"),
+            severity: (incident.severity ?? "Medium") as Incident["severity"],
+            status: (incident.status ?? "Open") as Incident["status"],
+            time: String(incident.time ?? "Just now"),
+          })));
         }
       } catch (error) {
         console.error("Incident loading failed", error);
@@ -268,12 +278,25 @@ export default function Home() {
       formData.set("asset", asset);
       formData.set("severity", severity || "Medium");
       const result = await createIncident(formData);
+      
       if (!result.ok) {
         showToast(result.message, "error");
         return;
       }
 
-      const newInc = { ...result.incident, id: result.incident.incidentId, databaseId: result.incident.id } as Incident;
+      // Explicit mapping to Incident type to prevent TS mismatch
+      const inc = result.incident as any;
+      const newInc: Incident = {
+        id: String(inc.incidentId ?? inc.id ?? "INC-NEW"),
+        databaseId: String(inc.id ?? ""),
+        title: String(inc.title ?? title),
+        asset: String(inc.asset ?? asset),
+        owner: String(inc.owner ?? "Ariel Reyhandy"),
+        severity: (inc.severity ?? severity) as Incident["severity"],
+        status: (inc.status ?? "Open") as Incident["status"],
+        time: String(inc.time ?? "Just now"),
+      };
+
       setIncidentsList((current) => [newInc, ...current]);
       form.reset();
       setIsIncidentModalOpen(false);
@@ -741,7 +764,7 @@ export default function Home() {
                             </td>
                           </tr>
                         ) : (
-                          filteredIncidents.map((incident) => (
+                          filteredIncidents.map((incident: Incident) => (
                             <tr key={incident.id} className="hover:bg-slate-800/30 transition-colors">
                               <td className="px-5 py-3.5">
                                 <div className="font-semibold text-slate-200">{incident.title}</div>
@@ -850,7 +873,7 @@ export default function Home() {
               </div>
 
               <div className="grid gap-3">
-                {incidentsList.map((inc) => (
+                {incidentsList.map((inc: Incident) => (
                   <div key={inc.id} className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/40 p-4">
                     <div className="flex items-center gap-3">
                       <div className="grid size-9 place-items-center rounded-lg bg-slate-800 text-rose-400 border border-slate-700">
@@ -936,7 +959,7 @@ export default function Home() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/60">
-                    {membersList.map((m) => (
+                    {membersList.map((m: TeamMember) => (
                       <tr key={m.email} className="hover:bg-slate-800/30">
                         <td className="px-5 py-3.5 flex items-center gap-3">
                           <div className="grid size-7 place-items-center rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 font-bold text-[10px]">
@@ -968,12 +991,12 @@ export default function Home() {
                             aria-label={`Hapus ${m.name}`}
                             className="inline-grid size-8 place-items-center rounded-lg text-slate-500 transition hover:bg-rose-500/10 hover:text-rose-400 disabled:opacity-50"
                           >
-                                      <Trash2 size={15} />
-                                    </button>}
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
+                            <Trash2 size={15} />
+                          </button>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
                 </table>
               </div>
             </div>
