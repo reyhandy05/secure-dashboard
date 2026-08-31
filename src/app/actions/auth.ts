@@ -1,59 +1,31 @@
 "use server";
 
 import { signIn } from "@/auth";
-import { prisma } from "@/lib/prisma";
-import { hashPassword, rateLimit } from "@/lib/security";
-import { createHash } from "node:crypto";
-import { z } from "zod";
+import { AuthError } from "next-auth";
 
-const activationSchema = z.object({
-  token: z.string().regex(/^[a-f0-9]{64}$/i),
-  password: z.string().min(8).regex(/[A-Za-z]/).regex(/\d/).regex(/[^A-Za-z\d]/),
-});
-
-function hashInviteToken(token: string) {
-  return createHash("sha256").update(token).digest("hex");
-}
-
-export async function activateInvitedMember(token: string, password: string) {
-  const parsed = activationSchema.safeParse({ token, password });
-  if (!parsed.success) {
-    return { success: false as const, error: "Link aktivasi atau password tidak valid." };
-  }
-
-  const limit = rateLimit(`activation:${hashInviteToken(token)}`, 5, 15 * 60 * 1000);
-  if (!limit.allowed) {
-    return { success: false as const, error: "Terlalu banyak percobaan. Coba lagi nanti." };
-  }
-
+export async function loginAction(credentials: { email: string; password: string }) {
   try {
-    const user = await prisma.user.findUnique({
-      where: { inviteTokenHash: hashInviteToken(token) },
-      select: { id: true, email: true, inviteTokenExpires: true },
-    });
-
-    if (!user || !user.inviteTokenExpires || user.inviteTokenExpires <= new Date()) {
-      return { success: false as const, error: "Link aktivasi sudah tidak berlaku." };
-    }
-
-    const passwordHash = await hashPassword(parsed.data.password);
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        passwordHash,
-        inviteTokenHash: null,
-        inviteTokenExpires: null,
-        inviteAcceptedAt: new Date(),
-      },
-    });
-
-    return signIn("credentials", {
-      email: user.email,
-      password: parsed.data.password,
-      redirectTo: "/",
+    // signIn secara default akan melempar error NEXT_REDIRECT jika berhasil
+    await signIn("credentials", {
+      email: credentials.email,
+      password: credentials.password,
+      redirectTo: "/dashboard", // Sesuaikan dengan halaman tujuan utama kamu
     });
   } catch (error) {
-    console.error("[activation] Member activation failed", error);
-    return { success: false as const, error: "Aktivasi akun tidak dapat diproses." };
+    // 1. Tangani error yang murni berasal dari NextAuth (seperti password salah)
+    if (error instanceof AuthError) {
+      switch (error.type) {
+        case "CredentialsSignin":
+          return { error: "Email atau password yang kamu masukkan salah." };
+        case "AccessDenied":
+          return { error: "Akses ditolak. Akun kamu mungkin belum aktif." };
+        default:
+          return { error: "Terjadi kesalahan pada sistem autentikasi." };
+      }
+    }
+    
+    // 2. WAJIB ADA: Lempar ulang error selain AuthError.
+    // Jika tidak dilempar ulang, halaman akan stuck dan tidak mau redirect.
+    throw error;
   }
 }

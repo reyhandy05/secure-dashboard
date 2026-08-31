@@ -1,17 +1,26 @@
 "use client";
 
-import { useFormStatus } from "react-dom";
+import { useState } from "react";
+import { loginAction } from "@/app/actions/auth"; 
 
-export default function SubmitButton() {
-  const { pending } = useFormStatus();
-  return (
-    <button
-      className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-500 py-2.5 text-sm font-semibold text-slate-950 transition-colors hover:bg-emerald-400 active:scale-[.99] disabled:cursor-not-allowed disabled:opacity-60"
-      type="submit"
-      disabled={pending}
-    >
-      {pending && <span className="size-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />}
-      {pending ? "Authenticating..." : "Continue"}
-    </button>
-  );
+export default function LoginPage() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+
+    // Panggil server action
+    const res = await loginAction({ email, password });
+
+    // Jika res memiliki nilai, berarti ada error yang dikembalikan dari AuthError
+    // (Jika login sukses, eksekusi kode di bawahnya tidak akan berjalan karena Next.js langsung me-redirect halaman)
+    if (res?.error) {
+      setError(res.error);
+    }
+  }
+
+  // ... sisa JSX form
 }
