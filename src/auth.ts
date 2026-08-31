@@ -2,8 +2,8 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "@/lib/prisma";
-import { loginSchema } from "@/lib/validators";
-import { verifyPassword } from "@/lib/security";
+import { loginOtpSchema } from "@/lib/validators";
+import { isValidLoginOtp } from "@/lib/security";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   adapter: PrismaAdapter(prisma),
@@ -21,13 +21,28 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       },
     },
   },
-  providers: [Credentials({ credentials: { email: {}, password: {}, totpCode: {} }, async authorize(raw) {
-    const parsed = loginSchema.safeParse(raw);
+  providers: [Credentials({ credentials: { email: {}, code: {} }, async authorize(raw) {
+    const parsed = loginOtpSchema.safeParse(raw);
     if (!parsed.success) return null;
-    const user = await prisma.user.findUnique({ where: { email: parsed.data.email.toLowerCase() } });
-    if (!user || !(await verifyPassword(user.passwordHash, parsed.data.password))) return null;
-    if (user.mfaEnabled && parsed.data.totpCode !== "000000") return null;
-    return { id: user.id, email: user.email, name: user.name, role: user.role === "ADMIN" ? "ADMIN" : "USER" };
+    const now = new Date();
+    const user = await prisma.user.findFirst({
+      where: { email: parsed.data.email.toLowerCase(), accessStatus: "ACTIVE", loginOtpExpires: { gt: now } },
+         select: { id: true, email: true, name: true, role: true, mfaEnabled: true, loginOtpHash: true },
+      });
+      if (!user?.loginOtpHash || !isValidLoginOtp(user.loginOtpHash, parsed.data.code)) return null;
+      const consumed = await prisma.user.updateMany({
+        where: { id: user.id, loginOtpHash: user.loginOtpHash, loginOtpExpires: { gt: now } },
+        data: {
+          loginOtpHash: null,
+          loginOtpExpires: null,
+          // A pending account is activated by its first valid login OTP.
+          ...(user.mfaEnabled ? {} : { mfaEnabled: true }),
+          lastSeenAt: now,
+        },
+      });
+    if (consumed.count !== 1) return null;
+    const role = user.role === "ADMIN" || user.role === "RESPONDER" || user.role === "VIEWER" ? user.role : "VIEWER";
+    return { id: user.id, email: user.email, name: user.name, role };
   } })],
   callbacks: {
     jwt({ token, user }) {
@@ -40,7 +55,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     session({ session, token }) {
       if (session.user) {
         session.user.id = token.id as string;
-        session.user.role = token.role as "ADMIN" | "USER";
+        session.user.role = token.role as "ADMIN" | "RESPONDER" | "VIEWER";
       }
       return session;
     },

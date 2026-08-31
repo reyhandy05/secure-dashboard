@@ -92,3 +92,19 @@ export async function getActiveSessionIp() {
     return { success: false as const, ip: "Tidak tersedia" };
   }
 }
+
+export async function getCurrentUserProfile() {
+  const session = await auth();
+  if (!session?.user?.email) return { success: false as const, error: "Sesi tidak valid." };
+
+  const user = await prisma.user.findUnique({
+    where: { email: session.user.email },
+    select: { name: true, email: true, role: true },
+  });
+  if (!user) return { success: false as const, error: "Profil pengguna tidak ditemukan." };
+
+  return {
+    success: true as const,
+    user: { name: user.name ?? user.email, email: user.email, role: user.role },
+  };
+}

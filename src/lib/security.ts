@@ -1,5 +1,5 @@
 import argon2 from "argon2";
-import { createHash } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { isIP } from "node:net";
 
 const attempts = new Map<string, { count: number; resetAt: number }>();
@@ -19,6 +19,12 @@ export function rateLimit(key: string, limit = AUTH_LIMIT, windowMs = WINDOW_MS)
   if (current.count >= limit) return { allowed: false, remaining: 0, retryAfter: Math.ceil((current.resetAt - now) / 1000) };
   current.count += 1;
   return { allowed: true, remaining: limit - current.count };
+}
+export function hashLoginOtp(code: string) { return createHash("sha256").update(`${code}:${process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET ?? "development-only"}`).digest("hex"); }
+export function isValidLoginOtp(storedHash: string, code: string) {
+  const expected = Buffer.from(storedHash, "hex");
+  const actual = Buffer.from(hashLoginOtp(code), "hex");
+  return expected.length === actual.length && timingSafeEqual(expected, actual);
 }
 export function assertSameOrigin(request: Request) {
   const origin = request.headers.get("origin") ?? request.headers.get("referer");

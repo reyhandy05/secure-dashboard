@@ -3,8 +3,8 @@
 import React, { useEffect, useRef, useState, useTransition } from "react";
 import { createIncident, deleteIncident, getIncidents, logoutAction, resolveIncident } from "./actions";
 import { sendInviteEmail } from "./actions/invite";
-import { getMembers, requestDeleteMemberOTP, verifyAndDeleteMember } from "./actions/member";
-import { getActiveSessionIp, updateUserPassword, updateUserProfile } from "./actions/profile";
+import { getMembers, requestDeleteMemberOTP, verifyAndDeleteMember, requestRoleChangeOTP, verifyAndUpdateMemberRole, requestMfaSetupOTP, verifyMfaSetupOTP, updatePresence } from "./actions/member";
+import { getActiveSessionIp, getCurrentUserProfile, updateUserPassword, updateUserProfile } from "./actions/profile";
 import { supabase } from "@/lib/supabaseClient";
 import {
   AlertTriangle,
@@ -46,8 +46,8 @@ interface TeamMember {
   name: string;
   email: string;
   role: string;
-  mfa: "Enforced" | "Pending";
-  status: "Active" | "Invited";
+  mfa: "Active" | "Pending";
+  status: "Online" | "Offline" | "Invited";
   initials: string;
 }
 
@@ -88,7 +88,7 @@ export default function Home() {
   const [currentTab, setCurrentTab] = useState<"dashboard" | "profile" | "settings">("dashboard");
   const [incidentsList, setIncidentsList] = useState<Incident[]>([]);
   const [membersList, setMembersList] = useState<TeamMember[]>([]);
-  const [currentUser, setCurrentUser] = useState({ name: "Ariel Reyhandy", email: "reyhandy05@gmail.com" });
+  const [currentUser, setCurrentUser] = useState({ name: "Memuat...", email: "", role: "VIEWER" });
   const [activeSessionIp, setActiveSessionIp] = useState("Mendeteksi...");
   const [searchQuery, setSearchQuery] = useState("");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -109,6 +109,14 @@ export default function Home() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [resendCountdown, setResendCountdown] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const isAdmin = currentUser.role === "ADMIN";
+  const [roleTarget, setRoleTarget] = useState<TeamMember | null>(null);
+  const [roleValue, setRoleValue] = useState("VIEWER");
+  const [roleOtp, setRoleOtp] = useState("");
+  const [roleError, setRoleError] = useState<string | null>(null);
+  const [mfaModalOpen, setMfaModalOpen] = useState(false);
+  const [mfaOtp, setMfaOtp] = useState("");
+  const [mfaError, setMfaError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isUserMenuOpen) return;
@@ -184,7 +192,25 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    const heartbeat = window.setInterval(() => void updatePresence(), 30_000);
+    void updatePresence();
+    const source = new EventSource("/api/presence");
+    source.addEventListener("presence", (event) => {
+      const updates = JSON.parse((event as MessageEvent).data) as Array<{ id: string; status: TeamMember["status"] }>;
+      setMembersList((current) => current.map((member) => {
+        const update = updates.find((item) => item.id === member.id);
+        return update && member.status !== "Invited" ? { ...member, status: update.status } : member;
+      }));
+    });
+    return () => { window.clearInterval(heartbeat); source.close(); };
+  }, []);
+
+  useEffect(() => {
     let active = true;
+    getCurrentUserProfile().then((result) => {
+      if (active && result.success) setCurrentUser(result.user);
+    }).catch((error) => console.error("Profile loading failed", error));
+
     getMembers().then((result) => {
       if (!active) return;
       if (!result.success) {
@@ -192,8 +218,6 @@ export default function Home() {
         return;
       }
       setMembersList(result.data);
-      const adminMember = result.data.find((member) => member.role === "Administrator");
-      if (adminMember) setCurrentUser({ name: adminMember.name, email: adminMember.email });
     }).catch((error) => {
       console.error("Member loading failed", error);
       if (active) showToast("Data member tidak dapat dimuat.");
@@ -333,7 +357,7 @@ export default function Home() {
           email,
           role: role || "Viewer",
           mfa: "Pending",
-          status: "Active",
+          status: "Invited",
           initials: initials || "US",
         }]);
       }
@@ -401,6 +425,83 @@ export default function Home() {
     } catch (error) {
       console.error("Member deletion failed", error);
       setDeleteError("Member tidak dapat dihapus.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleRequestRoleChange = async (member: TeamMember, nextRole: string) => {
+    if (!isAdmin || !member.id || nextRole === member.role.toUpperCase()) return;
+    setIsSubmitting(true);
+    setRoleError(null);
+    try {
+      const result = await requestRoleChangeOTP(member.id, nextRole);
+      if (!result.success) {
+        showToast(result.error ?? "OTP gagal dikirim.", "error");
+        return;
+      }
+      setRoleTarget(member);
+      setRoleValue(nextRole);
+      setRoleOtp("");
+      setResendCountdown(30);
+      showToast(`OTP dikirim ke ${result.adminEmail}.`);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleConfirmRoleChange = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!roleTarget?.id) return;
+    setIsSubmitting(true);
+    setRoleError(null);
+    try {
+      const result = await verifyAndUpdateMemberRole(roleTarget.id, roleValue, roleOtp);
+      if (!result.success) {
+        setRoleError(result.error ?? "Kode OTP tidak valid.");
+        return;
+      }
+      const label = roleValue === "ADMIN" ? "Administrator" : roleValue === "RESPONDER" ? "Responder" : "Viewer";
+      const roleRank: Record<string, number> = { Administrator: 0, Responder: 1, Viewer: 2 };
+      setMembersList((current) => current.map((member) => member.id === roleTarget.id ? { ...member, role: label } : member).sort((a, b) => (roleRank[a.role] ?? 99) - (roleRank[b.role] ?? 99) || a.name.localeCompare(b.name)));
+      setRoleTarget(null);
+      setRoleOtp("");
+      showToast(`Role ${roleTarget.name} berhasil diubah.`);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleRequestMfaSetup = async () => {
+    setIsSubmitting(true);
+    setMfaError(null);
+    try {
+      const result = await requestMfaSetupOTP();
+      if (!result.success) {
+        showToast(result.error ?? "OTP MFA gagal dikirim.", "error");
+        return;
+      }
+      setMfaOtp("");
+      setMfaModalOpen(true);
+      showToast(`OTP MFA dikirim ke ${result.email}.`);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleConfirmMfa = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setIsSubmitting(true);
+    setMfaError(null);
+    try {
+      const result = await verifyMfaSetupOTP(mfaOtp);
+      if (!result.success) {
+        setMfaError(result.error ?? "Kode OTP tidak valid.");
+        return;
+      }
+      setMembersList((current) => current.map((member) => member.email === currentUser.email ? { ...member, mfa: "Active" } : member));
+      setMfaModalOpen(false);
+      showToast("MFA berhasil diaktifkan.");
     } finally {
       setIsSubmitting(false);
     }
@@ -477,7 +578,7 @@ export default function Home() {
                 <p className="truncate text-xs font-semibold text-white">{profileName}</p>
                 <p className="mt-0.5 truncate text-[11px] text-slate-400">{profileEmail}</p>
                 <span className="mt-2 inline-flex items-center rounded-md border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
-                  Administrator
+                  {currentUser.role === "ADMIN" ? "Administrator" : currentUser.role === "RESPONDER" ? "Responder" : "Viewer"}
                 </span>
               </div>
               <div className="p-1.5">
@@ -812,7 +913,7 @@ export default function Home() {
                   <h2 className="text-2xl font-bold text-white">Team Access & RBAC</h2>
                   <p className="text-xs text-slate-400">Kelola otorisasi akun dan kepatuhan autentikasi MFA.</p>
                 </div>
-                <button
+                {isAdmin && <button
                   onClick={() => {
                     setInviteErrorMessage(null);
                     setIsInviteModalOpen(true);
@@ -820,7 +921,7 @@ export default function Home() {
                   className="flex items-center gap-2 rounded-lg bg-emerald-500 px-3.5 py-2 text-xs font-semibold text-slate-950 hover:bg-emerald-400 transition"
                 >
                   <Plus size={15} /> Invite Member
-                </button>
+                </button>}
               </div>
 
               <div className="rounded-xl border border-slate-800 bg-slate-900/40 overflow-hidden">
@@ -846,15 +947,20 @@ export default function Home() {
                             <div className="text-[11px] text-slate-500">{m.email}</div>
                           </div>
                         </td>
-                        <td className="px-3 py-3.5 text-slate-300">{m.role}</td>
+                        <td className="px-3 py-3.5 text-slate-300">
+                          {isAdmin ? <select value={m.role === "Administrator" ? "ADMIN" : m.role === "Responder" ? "RESPONDER" : "VIEWER"} onChange={(event) => void handleRequestRoleChange(m, event.target.value)} disabled={isSubmitting} className="rounded-md border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-200 outline-none focus:border-emerald-500">
+                            <option value="ADMIN">Administrator</option><option value="RESPONDER">Responder</option><option value="VIEWER">Viewer</option>
+                          </select> : m.role}
+                        </td>
                         <td className="px-3 py-3.5">
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${m.mfa === "Enforced" ? "bg-emerald-500/10 text-emerald-400" : "bg-amber-500/10 text-amber-400"}`}>
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${m.mfa === "Active" ? "bg-emerald-500/10 text-emerald-400" : "bg-amber-500/10 text-amber-400"}`}>
                             {m.mfa}
                           </span>
                         </td>
                         <td className="px-3 py-3.5 text-slate-400">{m.status}</td>
                         <td className="px-3 py-3.5 text-right">
-                          <button
+                          {m.email === currentUser.email && m.mfa === "Pending" && <button type="button" onClick={() => void handleRequestMfaSetup()} disabled={isSubmitting} className="mr-2 rounded-md border-cyan-500/30 px-2 py-1 text-[10px] font-semibold text-cyan-300 hover:bg-cyan-500/10 disabled:opacity-50">Setup MFA</button>}
+                          {isAdmin && <button
                             type="button"
                             onClick={() => handleRequestDelete(m)}
                             disabled={isSubmitting}
@@ -862,12 +968,12 @@ export default function Home() {
                             aria-label={`Hapus ${m.name}`}
                             className="inline-grid size-8 place-items-center rounded-lg text-slate-500 transition hover:bg-rose-500/10 hover:text-rose-400 disabled:opacity-50"
                           >
-                            <Trash2 size={15} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
+                                      <Trash2 size={15} />
+                                    </button>}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
                 </table>
               </div>
             </div>
@@ -882,8 +988,8 @@ export default function Home() {
               onToast={showToast}
               activeSessionIp={activeSessionIp}
               onProfileUpdated={(name, email) => {
-                setCurrentUser({ name, email });
-                setMembersList((current) => current.map((member) => member.role === "Administrator" ? { ...member, name, email, initials: name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase() } : member));
+                setCurrentUser((current) => ({ ...current, name, email }));
+                setMembersList((current) => current.map((member) => member.email === email ? { ...member, name, email, initials: name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase() } : member));
               }}
             />
           )}
@@ -939,6 +1045,19 @@ export default function Home() {
             </form>
           </div>
         </div>
+      )}
+
+      {roleTarget && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border-slate-800 bg-[#0c161d] p-6 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3"><div><h3 className="font-semibold text-white">Verifikasi Perubahan Role</h3><p className="mt-1 text-xs text-slate-400">OTP dikirim ke {"reyhandy05@gmail.com"}</p></div><button type="button" onClick={() => setRoleTarget(null)} aria-label="Tutup" className="text-slate-400 hover:text-white"><X size={18} /></button></div>
+            <form onSubmit={handleConfirmRoleChange} className="mt-5 space-y-4"><p className="text-xs leading-5 text-slate-400">Konfirmasi perubahan {roleTarget.name} menjadi {roleValue === "ADMIN" ? "Administrator" : roleValue === "RESPONDER" ? "Responder" : "Viewer"} menggunakan kode 6 digit dari email admin utama.</p><input value={roleOtp} onChange={(event) => setRoleOtp(event.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" pattern="[0-9]{6}" maxLength={6} autoFocus required placeholder="000" aria-label="Kode OTP role" className="w-full rounded-lg border-slate-800 bg-slate-950 px-4 py-3 text-center font-mono text-2xl tracking-[0.7em] text-cyan-300 outline-none focus:border-emerald-500" />{roleError && <p className="text-xs text-rose-400">{roleError}</p>}<div className="flex justify-end gap-2"><button type="button" onClick={() => setRoleTarget(null)} className="rounded-lg px-4 py-2 text-xs text-slate-400 hover:bg-slate-800">Batal</button><button type="submit" disabled={isSubmitting || roleOtp.length !== 6} className="rounded-lg bg-emerald-500 px-4 py-2 text-xs font-semibold text-slate-950 disabled:opacity-50">Verifikasi & Simpan</button></div></form>
+          </div>
+        </div>
+      )}
+
+      {mfaModalOpen && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur-sm"><div className="w-full max-w-md rounded-2xl border-slate-800 bg-[#0c161d] p-6 shadow-2xl"><div className="flex items-center justify-between border-b border-slate-800 pb-3"><div><h3 className="font-semibold text-white">Aktivasi MFA</h3><p className="mt-1 text-xs text-slate-400">Masukkan OTP yang dikirim ke email akun Anda.</p></div><button type="button" onClick={() => setMfaModalOpen(false)} aria-label="Tutup" className="text-slate-400 hover:text-white"><X size={18} /></button></div><form onSubmit={handleConfirmMfa} className="mt-5 space-y-4"><input value={mfaOtp} onChange={(event) => setMfaOtp(event.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" pattern="[0-9]{6}" maxLength={6} autoFocus required placeholder="000" aria-label="Kode OTP MFA" className="w-full rounded-lg border-slate-800 bg-slate-950 px-4 py-3 text-center font-mono text-2xl tracking-[0.7em] text-cyan-300 outline-none focus:border-emerald-500" />{mfaError && <p className="text-xs text-rose-400">{mfaError}</p>}<div className="flex justify-end gap-2"><button type="button" onClick={() => setMfaModalOpen(false)} className="rounded-lg px-4 py-2 text-xs text-slate-400 hover:bg-slate-800">Batal</button><button type="submit" disabled={isSubmitting || mfaOtp.length !== 6} className="rounded-lg bg-cyan-400 px-4 py-2 text-xs font-semibold text-slate-950 disabled:opacity-50">Aktifkan MFA</button></div></form></div></div>
       )}
 
       {incidentToDelete && (

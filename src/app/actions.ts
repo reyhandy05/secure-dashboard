@@ -134,6 +134,12 @@ export async function loginAction(formData: FormData) {
 }
 
 export async function logoutAction() {
+  const session = await auth();
+  if (session?.user?.id) {
+    await prisma.user.update({ where: { id: session.user.id }, data: { lastSeenAt: null } }).catch((error) => {
+      console.error("[presence] Failed to mark user offline", error);
+    });
+  }
   await signOut({ redirectTo: "/login" });
 }
 

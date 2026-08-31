@@ -115,6 +115,7 @@ export async function sendInviteEmail(formData: FormData) {
         name,
         email,
         role: databaseRole,
+        accessStatus: 'INVITED',
         passwordHash: temporaryPasswordHash,
         mfaEnabled: false,
         inviteTokenHash: hashInviteToken(inviteToken),

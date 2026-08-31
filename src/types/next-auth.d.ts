@@ -1,5 +1,5 @@
 import "next-auth";
 declare module "next-auth" {
-  interface Session { user: { id: string; role: "ADMIN" | "USER" } & DefaultSession["user"] }
-  interface User { role: "ADMIN" | "USER" }
+  interface Session { user: { id: string; role: "ADMIN" | "RESPONDER" | "VIEWER" } & DefaultSession["user"] }
+  interface User { role: "ADMIN" | "RESPONDER" | "VIEWER" }
 }

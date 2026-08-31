@@ -14,9 +14,19 @@ model User {
   passwordHash     String
   name             String?
   role             String    @default("USER")
+  accessStatus     String    @default("ACTIVE")
   mfaEnabled       Boolean   @default(false)
+  loginOtpHash     String?
+  loginOtpExpires  DateTime?
   deleteOtpHash    String?
   deleteOtpExpires DateTime?
+  roleOtpHash      String?
+  roleOtpExpires   DateTime?
+  roleOtpTargetId  String?
+  roleOtpNewRole   String?
+  mfaOtpHash       String?
+  mfaOtpExpires    DateTime?
+  lastSeenAt       DateTime?
   inviteTokenHash  String?   @unique
   inviteTokenExpires DateTime?
   inviteAcceptedAt DateTime?
