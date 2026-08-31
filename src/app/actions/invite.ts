@@ -124,8 +124,13 @@ export async function sendInviteEmail(formData: FormData) {
       select: { id: true, name: true, email: true, role: true },
     });
 
-    const baseUrl = process.env.NEXTAUTH_URL || process.env.AUTH_URL || 'http://localhost:3000';
-    const activationUrl = `${baseUrl}/auth/activate?token=${inviteToken}`;
+    // PERBAIKAN: Paksa membaca URL dari Vercel Environment yang sudah dibuat
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+    
+    // Pastikan tidak ada double slash jika NEXT_PUBLIC_APP_URL diakhiri '/'
+    const cleanBaseUrl = baseUrl.replace(/\/$/, ""); 
+    const activationUrl = `${cleanBaseUrl}/auth/activate?token=${inviteToken}`;
+    
     const safeName = escapeHtml(name);
     const safeRole = escapeHtml(role);
     const safeActivationUrl = escapeHtml(activationUrl);
