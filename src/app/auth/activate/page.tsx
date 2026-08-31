@@ -1,11 +1,12 @@
 "use client";
 
 import { FormEvent, Suspense, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation"; // Tambahkan useRouter
 import { activateInvitedMember } from "@/app/actions/auth";
 
 function ActivateForm() {
   const searchParams = useSearchParams();
+  const router = useRouter(); // Inisialisasi router
   const token = searchParams.get("token") ?? "";
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
@@ -15,15 +16,36 @@ function ActivateForm() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
+    
     if (password !== confirmation) {
       setError("Konfirmasi password tidak cocok.");
       return;
     }
+    
     setIsPending(true);
     try {
       const result = await activateInvitedMember(token, password);
-      if (!result.success) setError(result.error);
+      
+      // PERBAIKAN 1: Gunakan optional chaining untuk mengecek error
+      // Jika result mengembalikan pesan error (misal: gagal validasi)
+      if (result?.error) {
+        setError(result.error);
+        return;
+      }
+
+      // PERBAIKAN 2: Tangani kasus sukses jika return undefined (tidak ada error)
+      if (result?.success || result === undefined) {
+        // Arahkan ke halaman login (atau dashboard)
+        router.push("/login");
+      }
+
     } catch (activationError) {
+      // PERBAIKAN 3: Jangan tangkap error jika itu adalah NEXT_REDIRECT
+      // Next.js menggunakan error throw untuk melakukan redirect di server action
+      if (activationError instanceof Error && activationError.message === "NEXT_REDIRECT") {
+        throw activationError;
+      }
+      
       console.error("Activation request failed", activationError);
       setError("Aktivasi akun tidak dapat diproses.");
     } finally {
