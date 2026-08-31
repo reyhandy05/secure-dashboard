@@ -1,12 +1,12 @@
 "use client";
 
 import { FormEvent, Suspense, useState } from "react";
-import { useSearchParams, useRouter } from "next/navigation"; // Tambahkan useRouter
+import { useSearchParams, useRouter } from "next/navigation";
 import { activateInvitedMember } from "@/app/actions/auth";
 
 function ActivateForm() {
   const searchParams = useSearchParams();
-  const router = useRouter(); // Inisialisasi router
+  const router = useRouter();
   const token = searchParams.get("token") ?? "";
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
@@ -26,26 +26,18 @@ function ActivateForm() {
     try {
       const result = await activateInvitedMember(token, password);
       
-      // PERBAIKAN 1: Gunakan optional chaining untuk mengecek error
-      // Jika result mengembalikan pesan error (misal: gagal validasi)
       if (result?.error) {
         setError(result.error);
         return;
       }
 
-      // PERBAIKAN 2: Tangani kasus sukses jika return undefined (tidak ada error)
       if (result?.success || result === undefined) {
-        // Arahkan ke halaman login (atau dashboard)
         router.push("/login");
       }
-
     } catch (activationError) {
-      // PERBAIKAN 3: Jangan tangkap error jika itu adalah NEXT_REDIRECT
-      // Next.js menggunakan error throw untuk melakukan redirect di server action
       if (activationError instanceof Error && activationError.message === "NEXT_REDIRECT") {
         throw activationError;
       }
-      
       console.error("Activation request failed", activationError);
       setError("Aktivasi akun tidak dapat diproses.");
     } finally {
@@ -60,11 +52,33 @@ function ActivateForm() {
         <h1 className="mt-3 text-2xl font-bold text-white">Aktivasi akun member</h1>
         <p className="mt-2 text-sm text-slate-400">Buat password permanen untuk mulai menggunakan Security Console.</p>
         <div className="mt-6 space-y-3">
-          <input type="password" required minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Password baru" className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-emerald-500" />
-          <input type="password" required minLength={8} value={confirmation} onChange={(event) => setConfirmation(event.target.value)} placeholder="Konfirmasi password" className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-emerald-500" />
+          <input 
+            type="password" 
+            required 
+            minLength={8} 
+            value={password} 
+            onChange={(event) => setPassword(event.target.value)} 
+            placeholder="Password baru" 
+            className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-emerald-500" 
+          />
+          <input 
+            type="password" 
+            required 
+            minLength={8} 
+            value={confirmation} 
+            onChange={(event) => setConfirmation(event.target.value)} 
+            placeholder="Konfirmasi password" 
+            className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-emerald-500" 
+          />
         </div>
         {error && <p role="alert" className="mt-4 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-300">{error}</p>}
-        <button type="submit" disabled={isPending || !token} className="mt-5 w-full rounded-lg bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-slate-950 hover:bg-emerald-400 disabled:opacity-50">{isPending ? "Mengaktifkan..." : "Aktifkan akun"}</button>
+        <button 
+          type="submit" 
+          disabled={isPending || !token} 
+          className="mt-5 w-full rounded-lg bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-slate-950 hover:bg-emerald-400 disabled:opacity-50"
+        >
+          {isPending ? "Mengaktifkan..." : "Aktifkan akun"}
+        </button>
       </form>
     </main>
   );

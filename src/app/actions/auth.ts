@@ -7,31 +7,31 @@ import { hashPassword, rateLimit } from "@/lib/security";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 
-// ==================== LOGIN ACTION ====================
-export async function loginAction(credentials: { email: string; password: string }) {
+// ==================== 1. LOGIN ACTION ====================
+export async function loginAction(formData: FormData) {
+  const email = formData.get("email") as string;
+  const password = formData.get("password") as string;
+
   try {
     await signIn("credentials", {
-      email: credentials.email,
-      password: credentials.password,
-      redirectTo: "/", // arahkan ke dashboard
+      email,
+      password,
+      redirectTo: "/",
     });
   } catch (error) {
     if (error instanceof AuthError) {
       switch (error.type) {
         case "CredentialsSignin":
-          return { error: "Email atau password yang kamu masukkan salah." };
-        case "AccessDenied":
-          return { error: "Akses ditolak. Akun kamu mungkin belum aktif." };
+          return { error: "Email atau password salah." };
         default:
-          return { error: "Terjadi kesalahan pada sistem autentikasi." };
+          return { error: "Terjadi kesalahan saat masuk." };
       }
     }
-    // Wajib lempar ulang error agar Next.js redirect berjalan lancar
     throw error;
   }
 }
 
-// ==================== ACTIVATE MEMBER ACTION ====================
+// ==================== 2. ACTIVATE MEMBER ACTION ====================
 const activationSchema = z.object({
   token: z.string().regex(/^[a-f0-9]{64}$/i),
   password: z.string().min(8).regex(/[A-Za-z]/).regex(/\d/).regex(/[^A-Za-z\d]/),
