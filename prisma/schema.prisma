@@ -3,46 +3,37 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  provider = "postgresql" // atau "sqlite" / "mysql" sesuai database proyekmu
+  url      = env("DATABASE_URL")
 }
 
 model User {
-  id               String    @id @default(cuid())
-  email            String    @unique
-  passwordHash     String
-  name             String?
-  role             String    @default("USER")
-  accessStatus     String    @default("ACTIVE")
-  mfaEnabled       Boolean   @default(false)
-  loginOtpHash     String?
-  loginOtpExpires  DateTime?
-  deleteOtpHash    String?
-  deleteOtpExpires DateTime?
-  roleOtpHash      String?
-  roleOtpExpires   DateTime?
-  roleOtpTargetId  String?
-  roleOtpNewRole   String?
-  mfaOtpHash       String?
-  mfaOtpExpires    DateTime?
-  lastSeenAt       DateTime?
-  inviteTokenHash  String?   @unique
+  id                 String    @id @default(cuid())
+  name               String?
+  email              String    @unique
+  passwordHash       String
+  role               String    @default("Viewer")
+  accessStatus       String    @default("Active")
+  mfaEnabled         Boolean   @default(false)
+  
+  // Field untuk MFA & Login OTP
+  mfaOtpHash         String?
+  mfaOtpExpires      DateTime?
+  loginOtpHash       String?
+  loginOtpExpires    DateTime?
+  
+  // Field untuk Role OTP & Delete/Invite
+  roleOtpHash        String?
+  roleOtpExpires     DateTime?
+  deleteOtpHash      String?
+  deleteOtpExpires   DateTime?
+  inviteTokenHash    String?
   inviteTokenExpires DateTime?
-  inviteAcceptedAt DateTime?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-}
-
-model Incident {
-  id         String   @id @default(cuid())
-  incidentId String   @unique
-  title      String
-  asset      String
-  owner      String   @default("Ariel Reyhandy")
-  severity   String
-  status     String   @default("Open")
-  time       String   @default("Just now")
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  inviteAcceptedAt   DateTime?
+  
+  // Field untuk Realtime Presence
+  lastSeenAt         DateTime?
+  
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 }
