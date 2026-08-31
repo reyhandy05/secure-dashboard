@@ -13,6 +13,10 @@ async function main() {
     update: {
       passwordHash,
       role: "ADMIN",
+      accessStatus: "ACTIVE",
+      inviteAcceptedAt: new Date(),
+      inviteTokenHash: null,
+      inviteTokenExpires: null,
       mfaEnabled: false,
     },
     create: {
@@ -20,6 +24,8 @@ async function main() {
       name: "Ariel Reyhandy",
       passwordHash,
       role: "ADMIN",
+      accessStatus: "ACTIVE",
+      inviteAcceptedAt: new Date(),
       mfaEnabled: false,
     },
   });
