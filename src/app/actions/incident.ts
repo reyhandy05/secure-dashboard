@@ -2,15 +2,45 @@
 
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-imnext.config.tsport { incidentSchema } from "@/lib/validators";
+import { incidentSchema } from "@/lib/validators";
 import { revalidatePath } from "next/cache";
 
-async function requireSession() {
+type IncidentUser = {
+  id: string;
+  name: string | null;
+  email: string;
+};
+
+type IncidentWithUser = {
+  id: string;
+  incidentId: string | null;
+  title: string;
+  asset: string;
+  owner: string;
+  severity: string;
+  status: string;
+  time: string | null;
+  userId: string | null;
+  user: IncidentUser | null;
+};
+
+async function requireSession(): Promise<{
+  user: {
+    id: string;
+    email?: string | null;
+    name?: string | null;
+    role?: string;
+  };
+} | null> {
   try {
     const session = await auth();
-    if (session?.user?.id) return session;
+    if (session?.user?.id) {
+      return session;
+    }
 
-    if (process.env.NODE_ENV !== "development") return null;
+    if (process.env.NODE_ENV !== "development") {
+      return null;
+    }
 
     const developmentAdmin = await prisma.user.findFirst({
       where: { role: "ADMIN" },
@@ -18,14 +48,16 @@ async function requireSession() {
       orderBy: { createdAt: "asc" },
     });
 
-    if (!developmentAdmin) return null;
+    if (!developmentAdmin) {
+      return null;
+    }
 
     return {
       user: {
         id: developmentAdmin.id,
         email: developmentAdmin.email,
         name: developmentAdmin.name,
-        role: "ADMIN" as const,
+        role: developmentAdmin.role,
       },
     };
   } catch (error) {
@@ -34,15 +66,26 @@ async function requireSession() {
   }
 }
 
-export async function getIncidents() {
+export async function getIncidents(): Promise<IncidentWithUser[]> {
   const session = await requireSession();
-  if (!session) return [];
+  if (!session) {
+    return [];
+  }
 
   try {
     return await prisma.incident.findMany({
       where: { status: { not: "Resolved" } },
       orderBy: { createdAt: "desc" },
-      include: {
+      select: {
+        id: true,
+        incidentId: true,
+        title: true,
+        asset: true,
+        owner: true,
+        severity: true,
+        status: true,
+        time: true,
+        userId: true,
         user: {
           select: { id: true, name: true, email: true },
         },
@@ -55,25 +98,8 @@ export async function getIncidents() {
 }
 
 export async function createIncident(formData: FormData): Promise<
-  | {
-      success: true;
-      incident: {
-        id: string;
-        incidentId: string | null;
-        title: string;
-        asset: string;
-        owner: string;
-        severity: string;
-        status: string;
-        time: string | null;
-        userId: string | null;
-        user: { id: string; name: string | null; email: string } | null;
-      };
-    }
-  | {
-      success: false;
-      error: string;
-    }
+  | { success: true; incident: IncidentWithUser }
+  | { success: false; error: string }
 > {
   try {
     const session = await requireSession();
@@ -90,7 +116,9 @@ export async function createIncident(formData: FormData): Promise<
     if (!parsed.success) {
       return {
         success: false,
-        error: parsed.error.issues[0]?.message ?? "Judul insiden, aset terdampak, dan severity tidak valid.",
+        error:
+          parsed.error.issues[0]?.message ??
+          "Judul insiden, aset terdampak, dan severity tidak valid.",
       };
     }
 
@@ -103,7 +131,16 @@ export async function createIncident(formData: FormData): Promise<
         incidentId: `INC-${crypto.randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`,
         owner: session.user.name ?? "SOC Lead",
       },
-      include: {
+      select: {
+        id: true,
+        incidentId: true,
+        title: true,
+        asset: true,
+        owner: true,
+        severity: true,
+        status: true,
+        time: true,
+        userId: true,
         user: {
           select: { id: true, name: true, email: true },
         },
@@ -113,21 +150,7 @@ export async function createIncident(formData: FormData): Promise<
     revalidatePath("/");
     revalidatePath("/incidents");
 
-    return {
-      success: true,
-      incident: {
-        id: incident.id,
-        incidentId: incident.incidentId,
-        title: incident.title,
-        asset: incident.asset,
-        owner: incident.owner,
-        severity: incident.severity,
-        status: incident.status,
-        time: incident.time,
-        userId: incident.userId,
-        user: incident.user,
-      },
-    };
+    return { success: true, incident };
   } catch (error) {
     console.error("[incident] Failed to create incident", error);
     return { success: false, error: "Insiden tidak dapat dibuat." };
