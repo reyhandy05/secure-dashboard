@@ -44,7 +44,18 @@ export async function getIncidents() {
     return await prisma.incident.findMany({
       where: { status: { not: "Resolved" } },
       orderBy: { createdAt: "desc" },
-      select: { id: true, incidentId: true, title: true, asset: true, owner: true, severity: true, status: true, time: true },
+      select: {
+        id: true,
+        incidentId: true,
+        title: true,
+        asset: true,
+        owner: true,
+        severity: true,
+        status: true,
+        time: true,
+        createdAt: true,
+        createdByUserId: true,
+      },
     });
   } catch (error) {
     console.error("Failed to load incidents", error);
@@ -52,31 +63,66 @@ export async function getIncidents() {
   }
 }
 
-export async function createIncident(formData: FormData) {
+export async function createIncident(formData: FormData): Promise<
+  | { success: true; incident: {
+      id: string;
+      incidentId: string | null;
+      title: string;
+      asset: string;
+      owner: string;
+      severity: string;
+      status: string;
+      time: string | null;
+      createdByUserId: string | null;
+    } }
+  | { success: false; error: string }
+> {
   try {
     const session = await requireSession();
-    if (!session) return { ok: false as const, message: "Sesi login diperlukan." };
+    if (!session || !session.user?.id) {
+      return { success: false, error: "Sesi login diperlukan." };
+    }
 
     const parsed = incidentSchema.safeParse({
       title: String(formData.get("title") ?? "").trim(),
       asset: String(formData.get("asset") ?? "").trim().toUpperCase(),
       severity: String(formData.get("severity") ?? "Medium"),
     });
-    if (!parsed.success) return { ok: false as const, message: "Judul insiden dan aset terdampak wajib diisi dengan format yang benar." };
+
+    if (!parsed.success) {
+      return {
+        success: false,
+        error: parsed.error.issues[0]?.message ?? "Judul insiden, aset terdampak, dan severity tidak valid.",
+      };
+    }
 
     const incident = await prisma.incident.create({
       data: {
         ...parsed.data,
+        createdByUserId: session.user.id,
         incidentId: `INC-${crypto.randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`,
-        owner: session.user.name ?? "Ariel Reyhandy",
+        owner: session.user.name ?? "SOC Lead",
       },
-      select: { id: true, incidentId: true, title: true, asset: true, owner: true, severity: true, status: true, time: true },
+      select: {
+        id: true,
+        incidentId: true,
+        title: true,
+        asset: true,
+        owner: true,
+        severity: true,
+        status: true,
+        time: true,
+        createdByUserId: true,
+      },
     });
+
     revalidatePath("/");
-    return { ok: true as const, incident };
+    revalidatePath("/incidents");
+
+    return { success: true, incident };
   } catch (error) {
     console.error("Failed to create incident", error);
-    return { ok: false as const, message: "Insiden tidak dapat dibuat." };
+    return { success: false, error: "Insiden tidak dapat dibuat." };
   }
 }
 

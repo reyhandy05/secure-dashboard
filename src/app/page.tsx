@@ -278,26 +278,25 @@ export default function Home() {
       formData.set("asset", asset);
       formData.set("severity", severity || "Medium");
       const result = await createIncident(formData);
-      
-      if (!result.ok) {
-        showToast(result.message, "error");
+
+      if (!result.success) {
+        showToast(result.error ?? "Insiden tidak dapat disimpan.", "error");
         return;
       }
 
-      // Explicit mapping to Incident type to prevent TS mismatch
       const inc = result.incident as any;
       const newInc: Incident = {
         id: String(inc.incidentId ?? inc.id ?? "INC-NEW"),
         databaseId: String(inc.id ?? ""),
         title: String(inc.title ?? title),
         asset: String(inc.asset ?? asset),
-        owner: String(inc.owner ?? "Ariel Reyhandy"),
+        owner: String(inc.owner ?? "SOC Lead"),
         severity: (inc.severity ?? severity) as Incident["severity"],
         status: (inc.status ?? "Open") as Incident["status"],
         time: String(inc.time ?? "Just now"),
       };
 
-      setIncidentsList((current) => [newInc, ...current]);
+      setIncidentsList((current) => [newInc, ...current.filter((item) => item.databaseId !== newInc.databaseId)]);
       form.reset();
       setIsIncidentModalOpen(false);
       showToast(`Insiden ${newInc.id} berhasil dicatat.`);
