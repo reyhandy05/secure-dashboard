@@ -54,7 +54,10 @@ export async function getIncidents() {
         status: true,
         time: true,
         createdAt: true,
-        createdByUserId: true,
+        userId: true,
+        user: {
+          select: { id: true, name: true, email: true },
+        },
       },
     });
   } catch (error) {
@@ -73,7 +76,8 @@ export async function createIncident(formData: FormData): Promise<
       severity: string;
       status: string;
       time: string | null;
-      createdByUserId: string | null;
+      userId: string | null;
+      user?: { id: string; name: string | null; email: string } | null;
     } }
   | { success: false; error: string }
 > {
@@ -99,7 +103,7 @@ export async function createIncident(formData: FormData): Promise<
     const incident = await prisma.incident.create({
       data: {
         ...parsed.data,
-        createdByUserId: session.user.id,
+        userId: session.user.id,
         incidentId: `INC-${crypto.randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`,
         owner: session.user.name ?? "SOC Lead",
       },
@@ -112,7 +116,10 @@ export async function createIncident(formData: FormData): Promise<
         severity: true,
         status: true,
         time: true,
-        createdByUserId: true,
+        userId: true,
+        user: {
+          select: { id: true, name: true, email: true },
+        },
       },
     });
 

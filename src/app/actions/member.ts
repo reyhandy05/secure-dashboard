@@ -77,6 +77,52 @@ function escapeHtml(value: string) {
   })[character] ?? character);
 }
 
+async function sendKickNoticeEmail(targetUser: { name: string | null; email: string; id: string }) {
+  const sender = process.env.GMAIL_USER;
+  if (!sender || !process.env.GMAIL_APP_PASSWORD) {
+    console.warn("[member-delete] Gmail credentials missing; skipping kick notice email.");
+    return;
+  }
+
+  const name = targetUser.name ?? targetUser.email;
+  const safeName = escapeHtml(name);
+  const safeEmail = escapeHtml(targetUser.email);
+
+  await transporter.sendMail({
+    from: `"Northstar Dashboard" <${sender}>`,
+    to: targetUser.email,
+    subject: "[Security Notice] Akses Akun Dinonaktifkan - Northstar Security Console",
+    text: `Halo ${name},\n\nAkun Anda telah dinonaktifkan dan dikeluarkan dari Northstar Security Console oleh Administrator.\n\nJika Anda merasa ini adalah kesalahan, silakan hubungi administrator keamanan Anda segera.\n\nTerima kasih atas pemahaman Anda.`,
+    html: `
+      <div style="margin:0;padding:32px 16px;background:#050b10;font-family:Arial,Helvetica,sans-serif;color:#e2e8f0;">
+        <div style="max-width:560px;margin:0 auto;padding:0;border:1px solid #1f3440;border-radius:14px;background:#0b151c;overflow:hidden;">
+          <div style="padding:24px 28px;border-bottom:1px solid #1f3440;background:#0b151c;">
+            <p style="margin:0;color:#f87171;font-size:11px;font-weight:bold;letter-spacing:2px;">NORTHSTAR / SECURITY NOTICE</p>
+            <h1 style="margin:12px 0 0;font-size:24px;line-height:1.3;color:#f8fafc;">Akun Anda telah dinonaktifkan</h1>
+          </div>
+          <div style="padding:28px;">
+            <p style="margin:0 0 16px;color:#dbe7ee;line-height:1.7;">
+              Halo <strong style="color:#f8fafc">${safeName}</strong>,
+            </p>
+            <p style="margin:0 0 16px;color:#dbe7ee;line-height:1.7;">
+              Akun <strong style="color:#f8fafc">${safeEmail}</strong> telah dinonaktifkan dan dikeluarkan dari konsol keamanan Northstar oleh Administrator.
+            </p>
+            <div style="padding:18px 20px;border:1px solid #1f3440;border-left:4px solid #ef4444;background:#0f1d28;border-radius:10px;">
+              <p style="margin:0;color:#fca5a5;font-weight:bold;">Peringatan Keamanan</p>
+              <p style="margin:8px 0 0;color:#e2e8f0;line-height:1.7;">
+                Akses Anda ke Northstar Security Console telah dicabut. Jika Anda merasa ini adalah kesalahan, silakan hubungi administrator keamanan Anda segera.
+              </p>
+            </div>
+            <p style="margin:20px 0 0;color:#9fb0bc;line-height:1.7;">
+              Terima kasih atas pemahaman Anda.
+            </p>
+          </div>
+        </div>
+      </div>
+    `,
+  });
+}
+
 async function requireAdmin() {
   try {
     const session = await auth();
@@ -240,7 +286,15 @@ export async function verifyAndDeleteMember(targetUserId: string, otpInput: stri
       prisma.user.delete({ where: { id: targetUser.id } }),
       prisma.user.update({ where: { id: admin.id }, data: { deleteOtpHash: null, deleteOtpExpires: null } }),
     ]);
+
+    try {
+      await sendKickNoticeEmail(targetUser);
+    } catch (error) {
+      console.error("[member-delete] Kick notice email failed", error);
+    }
+
     revalidatePath("/");
+    revalidatePath("/incidents");
     console.log("[member-delete] Member deleted", { targetUserId: targetUser.id });
     return { success: true };
   } catch (error) {

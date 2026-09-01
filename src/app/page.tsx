@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useEffect, useRef, useState, useTransition } from "react";
-import { createIncident, deleteIncident, getIncidents, logoutAction, resolveIncident } from "./actions";
+import { createIncident, getIncidents } from "@/app/actions/incident";
+import { deleteIncident, logoutAction, resolveIncident } from "./actions";
 import { sendInviteEmail } from "./actions/invite";
 import { getMembers, requestDeleteMemberOTP, verifyAndDeleteMember, requestRoleChangeOTP, verifyAndUpdateMemberRole, requestMfaSetupOTP, verifyMfaSetupOTP, updatePresence } from "./actions/member";
 import { getActiveSessionIp, getCurrentUserProfile, updateUserPassword, updateUserProfile } from "./actions/profile";
@@ -99,6 +100,8 @@ export default function Home() {
 
   // Modal States
   const [isIncidentModalOpen, setIsIncidentModalOpen] = useState(false);
+  const [incidentForm, setIncidentForm] = useState({ title: "", asset: "", severity: "Medium" as Incident["severity"] });
+  const [incidentFormError, setIncidentFormError] = useState<string | null>(null);
   const [incidentToDelete, setIncidentToDelete] = useState<Incident | null>(null);
   const [isDeletingIncident, setIsDeletingIncident] = useState(false);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
@@ -155,7 +158,7 @@ export default function Home() {
             databaseId: String(incident.id ?? ""),
             title: String(incident.title ?? "Untitled"),
             asset: String(incident.asset ?? "Unknown asset"),
-            owner: String(incident.owner ?? "Ariel Reyhandy"),
+            owner: String(incident.user?.name ?? incident.owner ?? "SOC Lead"),
             severity: (incident.severity ?? "Medium") as Incident["severity"],
             status: (incident.status ?? "Open") as Incident["status"],
             time: String(incident.time ?? "Just now"),
@@ -257,30 +260,48 @@ export default function Home() {
     return () => { active = false; };
   }, []);
 
+  const closeIncidentModal = () => {
+    setIncidentForm({ title: "", asset: "", severity: "Medium" });
+    setIncidentFormError(null);
+    setIsIncidentModalOpen(false);
+  };
+
   // Sanitized Create Incident Handler
   const handleCreateIncident = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const form = e.currentTarget;
     setIsSubmitting(true);
+    setIncidentFormError(null);
 
     try {
-      const formData = new FormData(form);
-      const title = String(formData.get("title") ?? "").trim().replace(/[<>]/g, "");
-      const asset = String(formData.get("asset") ?? "").trim().replace(/[<>]/g, "").toUpperCase();
-      const severity = String(formData.get("severity") ?? "Medium") as Incident["severity"];
+      const title = incidentForm.title.trim().replace(/[<>]/g, "");
+      const asset = incidentForm.asset.trim().replace(/[<>]/g, "").toUpperCase();
+      const severity = incidentForm.severity || "Medium";
 
       if (!title || !asset) {
-        showToast("Judul insiden dan aset terdampak wajib diisi.", "error");
+        const message = "Judul insiden dan aset terdampak wajib diisi.";
+        setIncidentFormError(message);
+        showToast(message, "error");
         return;
       }
 
+      if (!/^[A-Z0-9._-]{2,80}$/.test(asset)) {
+        const message = "Format aset tidak valid. Gunakan huruf, angka, titik, underscore, atau dash (contoh: PROD-DB-01).";
+        setIncidentFormError(message);
+        showToast(message, "error");
+        return;
+      }
+
+      const formData = new FormData();
       formData.set("title", title);
       formData.set("asset", asset);
-      formData.set("severity", severity || "Medium");
+      formData.set("severity", severity);
+
       const result = await createIncident(formData);
 
       if (!result.success) {
-        showToast(result.error ?? "Insiden tidak dapat disimpan.", "error");
+        const message = result.error ?? "Insiden tidak dapat disimpan.";
+        setIncidentFormError(message);
+        showToast(message, "error");
         return;
       }
 
@@ -290,19 +311,20 @@ export default function Home() {
         databaseId: String(inc.id ?? ""),
         title: String(inc.title ?? title),
         asset: String(inc.asset ?? asset),
-        owner: String(inc.owner ?? "SOC Lead"),
+        owner: String(inc.user?.name ?? inc.owner ?? "SOC Lead"),
         severity: (inc.severity ?? severity) as Incident["severity"],
         status: (inc.status ?? "Open") as Incident["status"],
         time: String(inc.time ?? "Just now"),
       };
 
       setIncidentsList((current) => [newInc, ...current.filter((item) => item.databaseId !== newInc.databaseId)]);
-      form.reset();
-      setIsIncidentModalOpen(false);
+      closeIncidentModal();
       showToast(`Insiden ${newInc.id} berhasil dicatat.`);
     } catch (error) {
       console.error("Incident submission failed", error);
-      showToast("Insiden tidak dapat disimpan. Silakan coba lagi.", "error");
+      const message = "Insiden tidak dapat disimpan. Silakan coba lagi.";
+      setIncidentFormError(message);
+      showToast(message, "error");
     } finally {
       setIsSubmitting(false);
     }
@@ -1128,35 +1150,39 @@ export default function Home() {
           <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-[#0c161d] p-6 shadow-2xl animate-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="font-semibold text-white">Record Security Incident</h3>
-              <button onClick={() => setIsIncidentModalOpen(false)} className="text-slate-400 hover:text-white">
+              <button type="button" onClick={closeIncidentModal} className="text-slate-400 hover:text-white" aria-label="Tutup modal insiden">
                 <X size={18} />
               </button>
             </div>
             <form onSubmit={handleCreateIncident} className="mt-4 space-y-4 text-xs">
               <div>
-                <label className="block mb-1 text-slate-300 font-medium">Incident Title</label>
+                <label className="mb-1 block font-medium text-slate-300">Incident Title</label>
                 <input
                   name="title"
-                  required
+                  value={incidentForm.title}
+                  onChange={(event) => setIncidentForm((current) => ({ ...current, title: event.target.value }))}
                   maxLength={80}
                   placeholder="Misal: Unusual outbound SSH traffic"
                   className="w-full rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-slate-200 outline-none focus:border-emerald-500"
                 />
               </div>
               <div>
-                <label className="block mb-1 text-slate-300 font-medium">Affected Asset</label>
+                <label className="mb-1 block font-medium text-slate-300">Affected Asset</label>
                 <input
                   name="asset"
-                  required
+                  value={incidentForm.asset}
+                  onChange={(event) => setIncidentForm((current) => ({ ...current, asset: event.target.value }))}
                   maxLength={40}
                   placeholder="Misal: PROD-DB-01"
-                  className="w-full rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-slate-200 outline-none focus:border-emerald-500"
+                  className="w-full rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-slate-200 uppercase outline-none focus:border-emerald-500"
                 />
               </div>
               <div>
-                <label className="block mb-1 text-slate-300 font-medium">Severity Level</label>
+                <label className="mb-1 block font-medium text-slate-300">Severity Level</label>
                 <select
                   name="severity"
+                  value={incidentForm.severity}
+                  onChange={(event) => setIncidentForm((current) => ({ ...current, severity: event.target.value as Incident["severity"] }))}
                   className="w-full rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-slate-200 outline-none focus:border-emerald-500"
                 >
                   <option value="Critical">Critical</option>
@@ -1165,10 +1191,17 @@ export default function Home() {
                   <option value="Low">Low</option>
                 </select>
               </div>
+
+              {incidentFormError && (
+                <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-[11px] text-rose-300" role="alert">
+                  {incidentFormError}
+                </div>
+              )}
+
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
-                  onClick={() => setIsIncidentModalOpen(false)}
+                  onClick={closeIncidentModal}
                   className="rounded-lg px-4 py-2 font-medium text-slate-400 hover:bg-slate-800"
                 >
                   Cancel
@@ -1179,7 +1212,7 @@ export default function Home() {
                   className="flex items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 font-semibold text-slate-950 hover:bg-emerald-400 disabled:opacity-50"
                 >
                   {isSubmitting && <Loader2 size={14} className="animate-spin" />}
-                  Save Incident
+                  {isSubmitting ? "Saving..." : "Save Incident"}
                 </button>
               </div>
             </form>

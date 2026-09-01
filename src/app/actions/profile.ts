@@ -47,6 +47,7 @@ export async function updateUserProfile(formData: FormData) {
       select: { id: true, name: true, email: true },
     });
     revalidatePath("/");
+    revalidatePath("/incidents");
     return { success: true as const, user: updated };
   } catch (error) {
     console.error("[profile] Profile update failed", error);
