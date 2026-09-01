@@ -2,7 +2,7 @@
 
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { incidentSchema } from "@/lib/validators";
+imnext.config.tsport { incidentSchema } from "@/lib/validators";
 import { revalidatePath } from "next/cache";
 
 async function requireSession() {
