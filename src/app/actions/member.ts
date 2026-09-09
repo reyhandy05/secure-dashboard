@@ -70,8 +70,8 @@ function escapeHtml(value: string) {
 }
 
 async function sendKickNoticeEmail(targetUser: { name: string | null; email: string; id: string }) {
-  if (!process.env.RESEND_API_KEY || !process.env.RESEND_FROM_EMAIL) {
-    console.warn("[member-delete] Resend credentials missing; skipping kick notice email.");
+  if (!process.env.RESEND_API_KEY) {
+    console.warn("[member-delete] Resend API key missing; skipping kick notice email.");
     return;
   }
 
@@ -80,7 +80,7 @@ async function sendKickNoticeEmail(targetUser: { name: string | null; email: str
   const safeEmail = escapeHtml(targetUser.email);
 
   const response = await resend.emails.send({
-    from: `Northstar Security <${process.env.RESEND_FROM_EMAIL}>`,
+    from: "Northstar Security <onboarding@resend.dev>",
     to: [targetUser.email],
     subject: "[Security Notice] Akses Akun Dinonaktifkan - Northstar Security Console",
     text: `Halo ${name},\n\nAkun Anda telah dinonaktifkan dan dikeluarkan dari Northstar Security Console oleh Administrator.\n\nJika Anda merasa ini adalah kesalahan, silakan hubungi administrator keamanan Anda segera.\n\nTerima kasih atas pemahaman Anda.`,
@@ -227,8 +227,8 @@ export async function requestDeleteMemberOTP(targetUserId: string) {
       return { success: false, error: "Akun admin yang sedang digunakan tidak dapat dihapus." };
     }
 
-    if (!process.env.RESEND_API_KEY || !process.env.RESEND_FROM_EMAIL) {
-      console.error("[member-delete] Resend credentials are not configured");
+    if (!process.env.RESEND_API_KEY) {
+      console.error("[member-delete] Resend API key is not configured");
       return { success: false, error: "Konfigurasi email server belum tersedia." };
     }
 
@@ -243,7 +243,7 @@ export async function requestDeleteMemberOTP(targetUserId: string) {
 
     const safeTargetName = escapeHtml(targetUser.name ?? targetUser.email);
     const response = await resend.emails.send({
-      from: `Northstar Security <${process.env.RESEND_FROM_EMAIL}>`,
+      from: "Northstar Security <onboarding@resend.dev>",
       to: [admin.email],
       subject: `[Security Alert] Otorisasi Penghapusan Member: ${targetUser.name || targetUser.email}`,
       text: `Halo Admin.\n\nMasukkan kode verifikasi berikut untuk mengonfirmasi penghapusan akun member: ${targetUser.email}\n\nKode OTP: ${otp}\n\nKode ini berlaku selama 10 menit. Jika Anda tidak memulai permintaan ini, abaikan email ini dan amankan akun Anda.`,
@@ -315,13 +315,13 @@ export async function requestRoleChangeOTP(targetUserId: string, newRole: string
       roleOtpHash: hashOtp(otp), roleOtpExpires: new Date(Date.now() + OTP_TTL_MS),
       roleOtpTargetId: target.id, roleOtpNewRole: newRole,
     } });
-    if (!process.env.RESEND_API_KEY || !process.env.RESEND_FROM_EMAIL) {
+    if (!process.env.RESEND_API_KEY) {
       return { success: false as const, error: "Konfigurasi email server belum tersedia." };
     }
     const safeTargetEmail = escapeHtml(target.email);
     const safeRole = escapeHtml(ROLE_LABELS[newRole]);
     const response = await resend.emails.send({
-      from: `Northstar Security <${process.env.RESEND_FROM_EMAIL}>`,
+      from: "Northstar Security <onboarding@resend.dev>",
       to: [PRIMARY_ADMIN_EMAIL],
       subject: "[Security] Verifikasi Perubahan Role - Northstar Dashboard",
       text: `Halo Administrator, gunakan kode berikut untuk mengonfirmasi perubahan role untuk akun ${target.email} menjadi ${ROLE_LABELS[newRole]}:\n\nKode OTP: ${otp}\n\nKode berlaku selama 10 menit. Jangan bagikan kode ini.`,
@@ -368,11 +368,11 @@ export async function requestMfaSetupOTP() {
   const otp = randomInt(100000, 1000000).toString();
   try {
     await prisma.user.update({ where: { id: user.id }, data: { mfaOtpHash: hashOtp(otp), mfaOtpExpires: new Date(Date.now() + OTP_TTL_MS) } });
-    if (!process.env.RESEND_API_KEY || !process.env.RESEND_FROM_EMAIL) {
+    if (!process.env.RESEND_API_KEY) {
       return { success: false as const, error: "Konfigurasi email server belum tersedia." };
     }
     const response = await resend.emails.send({
-      from: `Northstar Security <${process.env.RESEND_FROM_EMAIL}>`,
+      from: "Northstar Security <onboarding@resend.dev>",
       to: [user.email],
       subject: "[Security] OTP Aktivasi MFA",
       text: `Kode OTP aktivasi MFA Anda adalah ${otp}. Berlaku 10 menit.`,

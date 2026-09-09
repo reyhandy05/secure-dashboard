@@ -48,10 +48,6 @@ export async function sendLoginOtp(rawEmail: string): Promise<{ success: true } 
     return { success: false, error: "RESEND_API_KEY belum diatur di lingkungan runtime." };
   }
 
-  if (!process.env.RESEND_FROM_EMAIL) {
-    return { success: false, error: "RESEND_FROM_EMAIL belum diatur di lingkungan runtime." };
-  }
-
   const code = randomInt(100000, 1_000_000).toString().padStart(6, "0");
   const expiresAt = new Date(Date.now() + OTP_TTL_MS);
 
@@ -65,7 +61,7 @@ export async function sendLoginOtp(rawEmail: string): Promise<{ success: true } 
 
   try {
     const response = await resend.emails.send({
-      from: `Northstar Security <${process.env.RESEND_FROM_EMAIL}>`,
+      from: "Northstar Security <onboarding@resend.dev>",
       to: [user.email],
       subject: "Kode masuk Northstar Security Console",
       text: `Kode verifikasi Anda: ${code}\n\nKode ini berlaku selama 10 menit. Jangan bagikan kode ini kepada siapa pun.`,

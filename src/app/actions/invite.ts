@@ -86,8 +86,8 @@ export async function sendInviteEmail(formData: FormData) {
     return { success: false as const, error: 'Mohon isi nama dan alamat email dengan format yang benar.' };
   }
 
-  if (!process.env.RESEND_API_KEY || !process.env.RESEND_FROM_EMAIL) {
-    console.error('[invite] Resend credentials are not configured');
+  if (!process.env.RESEND_API_KEY) {
+    console.error('[invite] Resend API key is not configured');
     return { success: false, error: 'Konfigurasi email server belum tersedia.' };
   }
 
@@ -139,7 +139,7 @@ Pesan ini dibuat dan dikirim otomatis. Mohon jangan membalas email ini.
     `.trim();
 
     const response = await resend.emails.send({
-      from: `Northstar Security <${process.env.RESEND_FROM_EMAIL}>`,
+      from: 'Northstar Security <onboarding@resend.dev>',
       to: [email],
       subject: 'Akses Akun: Undangan Bergabung ke Northstar Security',
       text,
