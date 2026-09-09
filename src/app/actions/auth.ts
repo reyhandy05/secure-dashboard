@@ -20,7 +20,7 @@ export async function sendLoginOtp(rawEmail: string) {
   const email = parsed.data.toLowerCase();
   const user = await prisma.user.findFirst({ where: { email, accessStatus: "ACTIVE" }, select: { id: true, email: true, name: true } });
   if (!user) return { success: false as const, error: "Email tidak terdaftar dalam akses tim." };
-  if (!rateLimit(`login-otp:${hashInviteToken(email)}`, 3, OTP_TTL_MS).allowed) return { success: false as const, error: "Terlalu banyak permintaan kode. Coba lagi dalam 10 menit." };
+  if (!rateLimit(`login-otp:${hashInviteToken(email)}`, 50, OTP_TTL_MS).allowed) return { success: false as const, error: "Terlalu banyak permintaan kode. Coba lagi dalam 10 menit." };
   if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) return { success: false as const, error: "Konfigurasi email server belum tersedia." };
   const code = randomInt(100000, 1_000_000).toString();
   const expiresAt = new Date(Date.now() + OTP_TTL_MS);

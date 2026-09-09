@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -6,13 +7,16 @@ export const metadata: Metadata = {
   description: "Secure asset and incident management dashboard",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  const nonce = (await headers()).get("x-nonce") ?? "";
+
   return (
     <html
       lang="en"
       className="h-full antialiased"
+      nonce={nonce}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body nonce={nonce} className="min-h-full flex flex-col">{children}</body>
     </html>
   );
 }
