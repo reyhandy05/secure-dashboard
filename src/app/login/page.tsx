@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowLeft, MailCheck, ShieldCheck } from "lucide-react";
 import { sendLoginOtp, verifyLoginOtp } from "@/app/actions/auth";
 import SubmitButton from "./submit-button";
 
 export default function LoginPage() {
+  const router = useRouter();
   const [step, setStep] = useState<"email" | "code">("email");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -22,26 +24,54 @@ export default function LoginPage() {
   }, [countdown]);
 
   async function requestCode() {
-    setError(null); setNotice(null);
+    setError(null);
+    setNotice(null);
+
     const result = await sendLoginOtp(email);
-    if (!result.success) { setError(result.error); return; }
-    setCode(""); setStep("code"); setCountdown(60);
+    if (!result.success) {
+      setError(result.error);
+      return;
+    }
+
+    setCode("");
+    setStep("code");
+    setCountdown(60);
     setNotice("Kode verifikasi telah dikirim. Kode berlaku selama 10 menit.");
   }
-  async function resendCode() { if (countdown || resending) return; setResending(true); await requestCode(); setResending(false); }
+
+  async function resendCode() {
+    if (countdown || resending) return;
+    setResending(true);
+    await requestCode();
+    setResending(false);
+  }
+
   async function verifyCode() {
-    // Verifikasi tidak boleh mewarisi notifikasi dari request/resend OTP.
     setError(null);
     setNotice(null);
 
     try {
       const result = await verifyLoginOtp(email, code);
-      if (result && !result.success) setError(result.error);
+
+      if (!result.success) {
+        setError(result.error);
+        return;
+      }
+
+      router.push("/");
+      router.refresh();
     } catch {
       setError("Verifikasi kode tidak dapat diproses. Coba lagi.");
     }
   }
-  function changeEmail() { setStep("email"); setCode(""); setError(null); setNotice(null); setCountdown(0); }
+
+  function changeEmail() {
+    setStep("email");
+    setCode("");
+    setError(null);
+    setNotice(null);
+    setCountdown(0);
+  }
 
   return <main className="grid min-h-screen place-items-center bg-slate-950 p-4 text-slate-100">
     <section className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-8 shadow-2xl">

@@ -111,19 +111,10 @@ export async function verifyLoginOtp(rawEmail: string, rawCode: string): Promise
     return { success: true };
   } catch (error: unknown) {
     if (error instanceof AuthError) {
-      switch (error.type) {
-        case "CredentialsSignin":
-          return { success: false, error: "Kode salah, kadaluarsa, atau akses tim tidak aktif." };
-        default:
-          return { success: false, error: `Terjadi kesalahan saat masuk: ${error.message}` };
-      }
+      return { success: false, error: "Kode salah atau telah kedaluwarsa." };
     }
 
-    if (error instanceof Error) {
-      throw new Error(`Unexpected login error: ${error.message}`);
-    }
-
-    throw new Error("Unexpected login error.");
+    throw error;
   }
 }
 
