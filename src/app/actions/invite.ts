@@ -3,19 +3,11 @@
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 import { hashPassword } from '@/lib/security';
-import nodemailer from 'nodemailer';
 import { createHash, randomBytes } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
+import { Resend } from 'resend';
 
-const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 465,
-  secure: true,
-  auth: {
-    user: process.env.GMAIL_USER,
-    pass: process.env.GMAIL_APP_PASSWORD,
-  },
-});
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 function escapeHtml(value: string) {
   return value.replace(/[&<>'"]/g, (character) => ({
@@ -94,10 +86,8 @@ export async function sendInviteEmail(formData: FormData) {
     return { success: false as const, error: 'Mohon isi nama dan alamat email dengan format yang benar.' };
   }
 
-  const sender = process.env.GMAIL_USER;
-  const appPassword = process.env.GMAIL_APP_PASSWORD;
-  if (!sender || !appPassword) {
-    console.error('[invite] Gmail SMTP credentials are not configured');
+  if (!process.env.RESEND_API_KEY || !process.env.RESEND_FROM_EMAIL) {
+    console.error('[invite] Resend credentials are not configured');
     return { success: false, error: 'Konfigurasi email server belum tersedia.' };
   }
 
@@ -148,9 +138,9 @@ Email ini dikirim ke ${email} oleh Northstar Security Console.
 Pesan ini dibuat dan dikirim otomatis. Mohon jangan membalas email ini.
     `.trim();
 
-    const info = await transporter.sendMail({
-      from: `"Northstar Dashboard" <${sender}>`,
-      to: email,
+    const response = await resend.emails.send({
+      from: `Northstar Security <${process.env.RESEND_FROM_EMAIL}>`,
+      to: [email],
       subject: 'Akses Akun: Undangan Bergabung ke Northstar Security',
       text,
       html: `
@@ -173,11 +163,16 @@ Pesan ini dibuat dan dikirim otomatis. Mohon jangan membalas email ini.
       `,
     });
 
-    console.log('[invite] Email sent successfully', { messageId: info.messageId, userId: createdUser.id });
+    if (response.error) {
+      throw new Error(response.error.message ?? 'Resend returned an unknown error.');
+    }
+
+    console.log('[invite] Email sent successfully', { id: response.data?.id, userId: createdUser.id });
     revalidatePath('/');
     return { success: true as const, data: createdUser };
   } catch (error) {
-    console.error('[invite] Nodemailer send failed', error);
+    const resendError = error instanceof Error ? error : new Error('Unknown Resend send error');
+    console.error('[invite] Resend send failed', resendError);
     if (createdUser) {
       try {
         await prisma.user.delete({ where: { id: createdUser.id } });
@@ -185,6 +180,6 @@ Pesan ini dibuat dan dikirim otomatis. Mohon jangan membalas email ini.
         console.error('[invite] Failed to rollback created member', cleanupError);
       }
     }
-    return { success: false as const, error: 'Gagal membuat akun atau mengirim email undangan.' };
+    return { success: false as const, error: resendError.message };
   }
 }
